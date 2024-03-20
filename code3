@@ -1,0 +1,32 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+void generate_random_file(const char *file_path, size_t file_size) {
+    FILE *file = fopen(file_path, "wb");
+    if (file == NULL) {
+        printf("Error: Unable to create file '%s'\n", file_path);
+        return;
+    }
+
+    srand(time(NULL));
+
+    size_t bytes_written = 0;
+    while (bytes_written < file_size) {
+        unsigned char random_byte = rand() % 256;
+        fwrite(&random_byte, sizeof(unsigned char), 1, file);
+        bytes_written++;
+    }
+
+    fclose(file);
+}
+
+int main() {
+    const char *file_path = "random_file.bin";
+    size_t file_size = 4000;  // Specify the desired file size in bytes
+
+    generate_random_file(file_path, file_size);
+    printf("Random file '%s' generated with size %zu bytes.\n", file_path, file_size);
+
+    return 0;
+}
