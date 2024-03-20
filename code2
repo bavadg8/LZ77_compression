@@ -1,0 +1,150 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <math.h>
+
+long fsize(FILE *in) {
+    long pos, length;
+    pos = ftell(in);
+    fseek(in, 0L, SEEK_END);
+    length = ftell(in);
+    fseek(in, pos, SEEK_SET);
+    return length;
+}
+
+uint32_t lz77_compress(uint8_t *uncompressed_text, uint32_t uncompressed_size, uint8_t *compressed_text, uint8_t pointer_length_width) {
+    uint16_t pointer_pos, temp_pointer_pos, output_pointer, pointer_length, temp_pointer_length;
+    uint32_t compressed_pointer, output_size, coding_pos, output_lookahead_ref, look_behind, look_ahead;
+    uint16_t pointer_pos_max, pointer_length_max;
+    pointer_pos_max = pow(2, 16 - pointer_length_width);
+    pointer_length_max = pow(2, pointer_length_width);
+    
+    *((uint32_t *) compressed_text) = uncompressed_size;
+    *(compressed_text + 4) = pointer_length_width;
+    compressed_pointer = output_size = 5;
+
+    for(coding_pos = 0; coding_pos < uncompressed_size; ++coding_pos) {
+        pointer_pos = 0;
+        pointer_length = 0;
+        for(temp_pointer_pos = 1; (temp_pointer_pos < pointer_pos_max) && (temp_pointer_pos <= coding_pos); ++temp_pointer_pos) {
+            look_behind = coding_pos - temp_pointer_pos;
+            look_ahead = coding_pos;
+            for(temp_pointer_length = 0; uncompressed_text[look_ahead++] == uncompressed_text[look_behind++]; ++temp_pointer_length)
+                if(temp_pointer_length == pointer_length_max)
+                    break;
+            if(temp_pointer_length > pointer_length) {
+                pointer_pos = temp_pointer_pos;
+                pointer_length = temp_pointer_length;
+                if(pointer_length == pointer_length_max)
+                    break;
+            }
+        }
+        coding_pos += pointer_length;
+        if((coding_pos == uncompressed_size) && pointer_length) {
+            output_pointer = (pointer_length == 1) ? 0 : ((pointer_pos << pointer_length_width) | (pointer_length - 2));
+            output_lookahead_ref = coding_pos - 1;
+        } else {
+            output_pointer = (pointer_pos << pointer_length_width) | (pointer_length ? (pointer_length - 1) : 0);
+            output_lookahead_ref = coding_pos;
+        }
+        *((uint16_t *) (compressed_text + compressed_pointer)) = output_pointer;
+        compressed_pointer += 2;
+        *(compressed_text + compressed_pointer++) = *(uncompressed_text + output_lookahead_ref);
+        output_size += 3;
+    }
+
+    return output_size;
+}
+
+int main() {
+    FILE *file;
+    uint8_t *data;
+    uint32_t file_size;
+    uint8_t *compressed_data;
+    char *input_file = "random_file.bin";
+    char *output_file = "compressed_file.z77";
+    uint8_t pointer_length_width = 3; // Example width, adjust as needed
+
+    // Open the file
+    file = fopen(input_file, "rb");
+    if (file == NULL) {
+        perror("Error opening file");
+        return 1;
+    }
+
+    // Get file size
+    fseek(file, 0, SEEK_END);
+    file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    // Allocate memory for file data
+    data = (uint8_t *)malloc(file_size);
+    if (data == NULL) {
+        perror("Error allocating memory");
+        fclose(file);
+        return 1;
+    }
+
+    // Read file data
+    if (fread(data, 1, file_size, file) != file_size) {
+        perror("Error reading file");
+        fclose(file);
+        free(data);
+        return 1;
+    }
+
+    // Close the file
+    fclose(file);
+
+    // Allocate memory for compressed data
+    compressed_data = (uint8_t *)malloc(file_size * 2); // Adjusted size for maximum possible compression
+    if (compressed_data == NULL) {
+        perror("Error allocating memory");
+        free(data);
+        return 1;
+    }
+
+    // Compress the data
+    uint32_t compressed_size = lz77_compress(data, file_size, compressed_data, pointer_length_width);
+    if (compressed_size == 0) {
+        perror("Compression failed");
+        free(data);
+        free(compressed_data);
+        return 1;
+    }
+
+    // Write compressed data to file
+    file = fopen(output_file, "wb");
+    if (file == NULL) {
+        perror("Error opening file");
+        free(data);
+        free(compressed_data);
+        return 1;
+    }
+
+    if (fwrite(compressed_data, 1, compressed_size, file) != compressed_size) {
+        perror("Error writing to file");
+        fclose(file);
+        free(data);
+        free(compressed_data);
+        return 1;
+    }
+
+    // Close the file
+    fclose(file);
+
+    // Display compressed data
+    printf("Compressed data (%d bytes):\n", compressed_size);
+    for (int i = 0; i < compressed_size; ++i) {
+        printf("%02X ", compressed_data[i]);
+    }
+    printf("\n");
+
+    // Free allocated memory
+    free(data);
+    free(compressed_data);
+
+    printf("Compression successful. Compressed file saved as %s.\n", output_file);
+
+    return 0;
+}
