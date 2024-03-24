@@ -1,0 +1,453 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
+#include <conio.h> 
+
+#define size 128
+
+typedef struct treeNode {
+    float frequency;
+    char c;
+    char code[size];
+    struct treeNode *left;
+    struct treeNode *right;
+} TreeNode;
+
+void findMin(TreeNode *nodes[], float *min, int *minIndex, float *secondMin, int *secondMinIndex) {
+    int i, k;
+    k = 0;
+    *minIndex = -1;
+
+    while (k < 26 && nodes[k] == NULL) k++;
+
+    *minIndex = k;
+    *min = nodes[k]->frequency;
+
+    for (i = k; i < 26; i++) {
+        if (nodes[i] != NULL && nodes[i]->frequency < *min) {
+            *min = nodes[i]->frequency;
+            *minIndex = i;
+        }
+    }
+
+    k = 0;
+    *secondMinIndex = -1;
+
+    while ((k < 26 && nodes[k] == NULL) || (k == *minIndex && nodes[k] != NULL))
+        k++;
+
+    *secondMin = nodes[k]->frequency;
+    *secondMinIndex = k;
+
+    if (k == *minIndex)
+        k++;
+
+    for (i = k; i < 26; i++) {
+        if (nodes[i] != NULL && nodes[i]->frequency < *secondMin && i != *minIndex) {
+            *secondMin = nodes[i]->frequency;
+            *secondMinIndex = i;
+        }
+    }
+}
+
+void encode(TreeNode *node, TreeNode **letter, char direction, short level, char* code) {
+    int n;
+    if (node != NULL) {
+        if ((n = strlen(code)) < level) {
+            if (direction == 'R') {
+                strcat(code, "1");
+            } else {
+                if (direction == 'L') {
+                    strcat(code, "0");
+                }
+            }
+        } else {
+            if (n >= level) {
+                code[n - (n - level) - 1] = 0;
+                if (direction == 'R') {
+                    strcat(code, "1");
+                } else {
+                    if (direction == 'L') {
+                        strcat(code, "0");
+                    }
+                }
+            }
+        }
+        if (node->c >= 'A' && node->c <= 'Z') {
+            strcpy(node->code, code);
+            strcpy(letter[node->c - 'A']->code, code);
+        }
+        encode(node->left, letter, 'L', level + 1, code);
+        encode(node->right, letter, 'R', level + 1, code);
+    }
+}
+
+void huffman(char *inTxt ,char *outFile ){
+    char *key = malloc(1000);
+    key[0] = '>';
+    TreeNode *nodes[26], *letters[26];
+    char str[size];
+    int check;
+    int k, ind;
+    float min, secondMin;
+    int minIndex, secondMinIndex;
+    int charCount = 0;
+    TreeNode *tree;
+
+    FILE *in = fopen(inTxt, "r");
+    FILE *out;
+
+    int i;
+    for (i = 'A'; i <= 'Z'; i++) {
+        ind = i - 'A';
+        nodes[ind] = NULL;
+    }
+
+    int strLength;
+    charCount = 0;
+    check = fgets(str, size, in) != NULL;
+
+    while(!feof(in) || check) {
+        strLength = strlen(str);
+        for (i = 0; i < strLength; i++) {
+            str[i] = toupper(str[i]);
+            if (str[i] >= 'A' && str[i] <= 'Z') {
+                charCount++;
+                ind = str[i] - 'A';
+                if (nodes[ind] == NULL) {
+                    nodes[ind] = malloc(sizeof(TreeNode));
+                    nodes[ind]->c = str[i];
+                    nodes[ind]->frequency = 1;
+                    nodes[ind]->left = nodes[ind]->right = NULL;
+                } else {
+                    nodes[ind]->frequency += 1;
+                }
+            }
+        }
+        if (check) {
+            check = fgets(str, size, in) != NULL;
+        }
+    }
+
+    fclose(in);
+
+    for (i = 0, strLength = 0; i < 26; i++) {
+        letters[i] = nodes[i];
+        if (nodes[i] != NULL) {
+            nodes[i]->frequency /= charCount;
+            strLength++;
+        }
+    }
+
+    int j = 1;
+    do {
+        findMin(nodes, &min, &minIndex, &secondMin, &secondMinIndex);
+
+        if (minIndex != -1 && secondMinIndex != -1 && minIndex != secondMinIndex) {
+            TreeNode *temp;
+            tree = malloc(sizeof(TreeNode));
+            tree->frequency = nodes[minIndex]->frequency + nodes[secondMinIndex]->frequency;
+            tree->c = j;
+            tree->left = nodes[minIndex];
+            temp = malloc(sizeof(TreeNode));
+            temp->c = nodes[secondMinIndex]->c;
+            temp->frequency = nodes[secondMinIndex]->frequency;
+            temp->left = nodes[secondMinIndex]->left;
+            temp->right = nodes[secondMinIndex]->right;
+            tree->right = temp;
+
+            nodes[minIndex] = tree;
+            nodes[secondMinIndex] = NULL;
+        }
+        j++;
+    } while( j < strLength );
+
+    for (i = 0; i < 26; i++) {
+        if (nodes[i] != NULL)  {
+            char code[size];
+            strcpy(code, "");
+            encode(tree = nodes[i], letters, 0, 0, code);
+            traverseTree(nodes[i], key);
+            break;
+        }
+    }
+    in = fopen(inTxt, "r");
+    out = fopen(outFile, "w");
+    check = fgets(str, size, in) != NULL;
+    while(!feof(in) || check) {
+        strLength = strlen(str);
+        for (i = 0; i < strLength; i++) {
+            str[i] = toupper(str[i]);
+            if (str[i] >= 'A' && str[i] <= 'Z') {
+                ind = str[i] - 'A';
+                fputs(letters[ind]->code, out);
+            }
+        }
+        if (check) {
+            check = fgets(str, size, in) != NULL;
+        }
+    }
+
+    fclose(in);
+    fclose(out);
+
+    out = fopen(outFile, "r");
+    check = fgets(str, size, out) != NULL;
+    charCount = 0;
+    while(!feof(out) || check) {
+        charCount += strlen(str);
+        if (check) {
+            check = fgets(str, size, out) != NULL;
+        }
+    }
+    fclose(out);
+
+    out = fopen(outFile, "r");
+    check = fgets(str, size, out) != NULL;
+
+    while (!feof(out) || check) {
+        strLength = strlen(str);
+        if (check) {
+            check = fgets(str, size, out) != NULL;
+        }
+    }
+    fclose(out);
+
+    FILE *save = fopen(outFile, "a");
+    fputs(key, save);
+    fclose(save);
+}
+
+void traverseTree(TreeNode *node, char *key) {
+    if (node != NULL) {
+        if (node->c >= 'A' && node->c <= 'Z') {
+            strncat(key, &node->c, 1);
+            strcat(key, node->code);
+        }
+        traverseTree(node->left, key);
+        traverseTree(node->right, key);
+    }
+}
+
+typedef struct Data {
+    int offset;
+    int length;
+    char ch;
+} Data;
+
+void writeData(Data result, FILE *out) {
+    short int shift = result.offset << 6;
+    short int offsetLength = shift + result.length;
+    fwrite(&offsetLength, sizeof(offsetLength), 1, out);
+    fwrite(&result.ch, 1, sizeof(result.ch), out);
+}
+
+float getFileSize(char *textFile) {
+    float fileSize;
+
+    FILE *file = fopen(textFile, "rb");
+    fseek(file, 0, SEEK_END);
+    fileSize = ftell(file);
+    fclose(file);
+
+    return fileSize * 0.000977;
+}
+
+Data lz77Encode(char search[], int searchLength, char forward[], int forwardLength) {
+    Data data;
+    if (searchLength == 0) {
+        data.offset = 0;
+        data.length = 0;
+        data.ch = forward[0];
+        return data;
+    }
+
+    if (forwardLength == 0) {
+        data.offset = -1;
+        data.length = -1;
+        data.ch = ' ';
+        return data;
+    }
+
+    int maxSimilarity = 0;
+    int farthestDistance = 0;
+
+    int combinedLength = searchLength + forwardLength;
+    char *combinedArray = malloc(combinedLength);
+
+    memcpy(combinedArray, search, searchLength);
+    memcpy(combinedArray + searchLength, forward, forwardLength);
+
+    int searchIndex = searchLength;
+    for (int p = 0; p < searchLength; p++) {
+        int similarity = 0;
+        while (combinedArray[p + similarity] == combinedArray[searchIndex + similarity]) {
+            similarity++;
+            if ((searchIndex + similarity) == combinedLength) {
+                similarity--;
+                break;
+            }
+            if ((p + similarity) >= searchIndex) {
+                break;
+            }
+        }
+        if (similarity > maxSimilarity) {
+            farthestDistance = p;
+            maxSimilarity = similarity;
+        }
+    }
+
+    data.offset = farthestDistance;
+    data.length = maxSimilarity;
+    data.ch = combinedArray[searchIndex + maxSimilarity];
+    return data;
+}
+
+void lz77EncodeText(char *textFile, char *outTextFile) {
+    Data result;
+    int windowSize = 16;
+    int maxSearch = 1024;
+
+    int maxLiteralLength = pow(2, (windowSize - (log2(maxSearch))));
+
+    FILE *textFilePointer;
+    textFilePointer = fopen(textFile, "r");
+
+    FILE *outputFile;
+    outputFile = fopen(outTextFile, "wb");
+
+    int length = -1; // Length of the text
+    FILE *file;
+    char ch;
+    file = fopen(textFile, "r");
+    while (feof(file) == NULL) {
+        ch = getc(file);
+        length++;
+    }
+    fclose(file);
+
+    char character;
+    char *text = malloc(length);
+    character = fgetc(textFilePointer);
+    int id = 0;
+    while (character != EOF) {
+        text[id] = character;
+        character = fgetc(textFilePointer);
+        id++;
+    }
+    fclose(textFilePointer);
+
+    int searchIterator = 0;
+    int forwardIterator = 0;
+    int control = 0;
+    int counter = 0;
+    while (forwardIterator < length) {
+        int startSearch = searchIterator; 
+        int startForward = forwardIterator;
+
+        int bufferSize = forwardIterator - searchIterator; 
+        int forwardSize = maxLiteralLength; 
+
+        if (forwardSize > length) {
+            if (control == 0) {
+                forwardSize = length;
+                control++;
+            } else if (control > 0) {
+                forwardSize = length - bufferSize;
+            }
+        } else if (forwardSize <= length) {
+            control++;
+            if (control > 0) {
+                forwardSize = length - bufferSize;
+            }
+        }
+
+        char *searchBuffer = malloc(bufferSize);
+        for (int k = 0; k < bufferSize; k++, startSearch++) {
+            searchBuffer[k] = text[startSearch];
+        }
+
+        char *forwardBuffer = malloc(forwardSize);
+        for (int o = 0; o < forwardSize; o++, startForward++) {
+            forwardBuffer[o] = text[startForward];
+        }
+
+        result = lz77Encode(searchBuffer, bufferSize, forwardBuffer, forwardSize);
+
+        writeData(result, outputFile);
+
+        forwardIterator = forwardIterator + result.length + 1;
+        searchIterator = forwardIterator - maxSearch;
+
+        if (searchIterator < 0) {
+            searchIterator = 0;
+        }
+    }
+
+    fclose(outputFile);
+}
+
+void deflate(char *location, char *inputDeflate, char *deflateOut) {
+    huffman(location, inputDeflate);
+    lz77EncodeText(inputDeflate, deflateOut);
+}
+
+int main() {
+    int testCount = 3;
+    char locations[3][30] = {
+        "input\\alphabet.txt",
+        "input\\bible.txt",
+        "input\\a.txt"
+    };
+
+    char outputLocations[3][30] = {
+        "output\\alphabet.LZFG",
+        "output\\bible.LZFG",
+        "output\\a.LZFG"
+    };
+
+    char inputDEFLATE[3][30] = {
+        "inputDeflate\\alphabet.txt",
+        "inputDeflate\\bible.txt",
+        "inputDeflate\\a.txt"
+    };
+
+    char outputDEFLATE[3][30] = {
+        "outputDeflate\\alphabet.def",
+        "outputDeflate\\bible.def",
+        "outputDeflate\\a.def"
+    };
+
+    int i;
+    printf("#####################################################################################\n");
+    printf("######################### WELCOME TO THE COMPRESSION TEST ##############################\n");
+    printf("#####################################################################################\n");
+
+    printf("++++++++++++++++++++++++++++++LZ77 TEST START++++++++++++++++++++++++++++++++++++\n+\n");
+    for (i = 0; i < testCount; i++) {
+        printf("+\tTest %d test is starting -> File : %s , Size :%2.2f Kb\n", i + 1, locations[i], getFileSize(locations[i]));
+        lz77EncodeText(locations[i], outputLocations[i]);
+        float ratio = 100 - getFileSize(outputLocations[i]) / getFileSize(locations[i]) * 100;
+        printf("+\tCompression Rate : | %% %f |", ratio);
+        ratio < 0 ? printf("(Padding Process)\n") : printf("\n");
+        printf("+\tTest %d Result -> File : %s , Size :%2.2f Kb\n+\n", i + 1, outputLocations[i], getFileSize(outputLocations[i]));
+    }
+    printf("++++++++++++++++++++++++++++++LZSS TEST OVER++++++++++++++++++++++++++++++++++++++\n");
+
+    printf("####################################################################################\n");
+
+    printf("++++++++++++++++++++++++++++++DEFLATE TEST START++++++++++++++++++++++++++++++++\n+\n");
+    for (i = 0; i < testCount; i++) {
+        printf("+\tTest %d test is starting -> File : %s , Size :%2.2f Kb\n", i + 1, locations[i], getFileSize(locations[i]));
+        deflate(locations[i], inputDEFLATE[i], outputDEFLATE[i]);
+        float ratio = 100 - getFileSize(outputDEFLATE[i]) / getFileSize(locations[i]) * 100;
+        printf("+\tCompression Rate : | %% %f |", ratio);
+        ratio < 0 ? printf(" (Padding Process)\n") : printf("\n");
+        printf("+\tTest %d Result -> File : %s , Size :%2.2f Kb\n+\n", i + 1, outputDEFLATE[i], getFileSize(outputDEFLATE[i]));
+    }
+    printf("++++++++++++++++++++++++++++++DEFLATE TEST OVER++++++++++++++++++++++++++++++++++\n");
+
+    getch();
+    return 1;
+}
